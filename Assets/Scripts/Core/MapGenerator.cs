@@ -50,6 +50,9 @@ public class MapGenerator : MonoBehaviour
         else
             gridManager.ClearAll();
 
+        // 실제 시작점, 목표점 오브젝트 위치로 노드를 동기화한 뒤 캡처 (해당 위치에 벽 생성 방지)
+        gridManager.SyncStartEnd();
+
         int rows = gridManager.GetRows();
         int cols = gridManager.GetCols();
         GridNode startNode = gridManager.StartNode;

@@ -59,9 +59,20 @@ public class GridManager : MonoBehaviour
     // 장벽 상태 변경 여부 (PathFinderAI 재계산 트리거용)
     public bool WallsDirty { get; private set; }
 
+    // 맵 구조 변경 횟수. 벽 편집, 맵 생성, 시작/목표 변경 시 증가하며 대시보드 초기화 감지에 사용
+    public int MapVersion { get; private set; }
+
     // PathFinderAI가 변경 감지 후 플래그 해제 시 호출
     public void ClearWallsDirty() { WallsDirty = false; }
 
+    // 맵 구조가 변경되었음을 표시. 재계산 플래그를 세우고 맵 버전을 증가시킨다
+    private void MarkMapChanged()
+    {
+        WallsDirty = true;
+        MapVersion++;
+    }
+
+    //FIXME: 아래 함수는 더이상 사용하지 않습니다. 삭제를 권장합니다.
     // MapGenerator 등 외부에서 장벽 변경 신호를 보낼 때 호출
     public void MarkWallsDirty() { WallsDirty = true; }
 
@@ -173,6 +184,9 @@ public class GridManager : MonoBehaviour
         }
 
         InitStartEndNodes();
+
+        // 새 그리드 생성은 맵 변경으로 간주 (대시보드 초기화 대상)
+        MapVersion++;
     }
 
     // 시작/목표 노드 초기 설정
@@ -207,6 +221,7 @@ public class GridManager : MonoBehaviour
                 StartNode = newNode;
                 StartNode.isWall = false;
                 startTransform.position = new Vector3(StartNode.worldPosition.x, startTransform.position.y, StartNode.worldPosition.z);
+                MarkMapChanged();
                 RefreshAllCells();
             }
         }
@@ -220,6 +235,7 @@ public class GridManager : MonoBehaviour
                 EndNode = newNode;
                 EndNode.isWall = false;
                 endTransform.position = new Vector3(EndNode.worldPosition.x, endTransform.position.y, EndNode.worldPosition.z);
+                MarkMapChanged();
                 RefreshAllCells();
             }
         }
@@ -237,7 +253,7 @@ public class GridManager : MonoBehaviour
                 dragSetWall = !node.isWall;
                 node.isWall = dragSetWall;
                 RefreshCell(node);
-                WallsDirty = true;
+                MarkMapChanged();
             }
         }
         else if (leftClickAction.IsPressed() && isMouseDragging)
@@ -247,7 +263,7 @@ public class GridManager : MonoBehaviour
             {
                 node.isWall = dragSetWall;
                 RefreshCell(node);
-                WallsDirty = true;
+                MarkMapChanged();
             }
         }
         else if (leftClickAction.WasReleasedThisFrame())
@@ -305,6 +321,8 @@ public class GridManager : MonoBehaviour
         return result;
     }
 
+    //FIXME: 아래 함수는 더이상 사용하지 않습니다. 삭제를 권장합니다.
+    //FIXME: 휴리스틱 계산은 PathFinderAI.Heuristic에서 처리합니다.
     // 맨해튼 거리 휴리스틱 반환
     public float GetHeuristic(GridNode a, GridNode b)
     {
@@ -327,7 +345,7 @@ public class GridManager : MonoBehaviour
         for (int r = 0; r < rows; r++)
             for (int c = 0; c < cols; c++)
                 Grid[r, c].ResetAll();
-        WallsDirty = true;
+        MarkMapChanged();
         RefreshAllCells();
     }
 
@@ -377,6 +395,38 @@ public class GridManager : MonoBehaviour
     // 그리드 행 수 반환
     public int GetRows() => rows;
 
+    // startTransform, endTransform의 현재 위치를 기준으로 시작/목표 노드를 강제 재동기화
+    // 맵 생성 직전 등에서 호출하여 실제 시작점과 목표점 노드를 정확히 반영한다
+    // 반영된 시작/목표 노드는 장벽이 아니도록 보장한다
+    public void SyncStartEnd()
+    {
+        if (Grid == null) return;
+
+        if (startTransform != null)
+        {
+            GridNode n = GetNodeFromWorldPosition(startTransform.position);
+            if (n != null)
+            {
+                StartNode = n;
+                prevStartPos = startTransform.position;
+            }
+        }
+
+        if (endTransform != null)
+        {
+            GridNode n = GetNodeFromWorldPosition(endTransform.position);
+            if (n != null && n != StartNode)
+            {
+                EndNode = n;
+                prevEndPos = endTransform.position;
+            }
+        }
+
+        // 시작/목표 노드는 장벽이 될 수 없음
+        if (StartNode != null) StartNode.isWall = false;
+        if (EndNode != null)   EndNode.isWall = false;
+    }
+
     // 시작점과 목표점을 벽이 아닌 노드 중 랜덤으로 변경 (랜덤 위치 버튼)
     public void RandomizeStartEnd()
     {
@@ -423,7 +473,7 @@ public class GridManager : MonoBehaviour
             prevEndPos = endTransform.position;
         }
 
-        WallsDirty = true;
+        MarkMapChanged();
         RefreshAllCells();
         Debug.Log(string.Format("시작/목표 위치 변경. 시작: ({0},{1}), 목표: ({2},{3})", newStart.row, newStart.col, newEnd.row, newEnd.col));
     }

@@ -62,6 +62,7 @@ public class PlayerAI : MonoBehaviour
     }
 
     // 현재 위치에서 이동 시작. 이미 이동 중이면 재시작 (Move 버튼)
+    // 탐색 과정 애니메이션을 먼저 재생한 뒤 이동을 시작한다.
     public void StartMovement()
     {
         if (pathFinderAI == null || goalPoint == null)
@@ -71,11 +72,21 @@ public class PlayerAI : MonoBehaviour
         }
 
         StopMovement();
+        moveCoroutine = StartCoroutine(AnimateThenMove(transform.position));
+    }
 
+    // 탐색 과정 애니메이션을 재생한 후 이동을 시작하는 코루틴
+    // fromPos에서 목표점까지 경로를 계산하고 탐색 확산을 보여준 뒤 Move를 시작한다.
+    private IEnumerator AnimateThenMove(Vector3 fromPos)
+    {
         lastKnownGoalPos = goalPoint.position;
-        pathFinderAI.RequestRecalculate();
 
-        moveCoroutine = StartCoroutine(Move());
+        // 탐색 과정 애니메이션 (방문 노드 확산 후 경로 강조)
+        // StartCoroutine으로 분리하지 않고 직접 yield하여 하나의 코루틴 트리로 묶는다.
+        // 그래야 Stop 시 moveCoroutine 하나만 멈춰도 애니메이션과 이동이 모두 중단된다.
+        yield return pathFinderAI.PrepareAndAnimate(fromPos, goalPoint.position);
+
+        yield return Move();
     }
 
     // 현재 위치에서 이동 정지 및 경로 시각화 제거 (Stop 버튼)
@@ -105,9 +116,9 @@ public class PlayerAI : MonoBehaviour
 
         transform.position = startPoint.position;
         lastKnownGoalPos   = goalPoint.position;
-        pathFinderAI.RequestRecalculate();
 
-        moveCoroutine = StartCoroutine(Move());
+        // 시작점에서 탐색 애니메이션을 재생한 뒤 이동 시작
+        moveCoroutine = StartCoroutine(AnimateThenMove(startPoint.position));
     }
 
     // 경로를 따라 목표점까지 이동하는 코루틴
@@ -139,7 +150,8 @@ public class PlayerAI : MonoBehaviour
             }
 
             // 다음 위치로 이동 (장벽/목표 변경 감지 시 조기 종료)
-            yield return StartCoroutine(MoveToPosition(nextPos));
+            // 직접 yield하여 상위 코루틴 트리에 포함시킨다 (Stop 시 함께 중단되도록)
+            yield return MoveToPosition(nextPos);
         }
 
         IsMoving = false;
